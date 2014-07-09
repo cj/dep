@@ -40,10 +40,10 @@ module Dep
     end
   end
 
-  class Lib < Struct.new(:name, :version)
+  class Lib < Struct.new(:name, :version, :source)
     def self.[](line)
-      if line.strip =~ /^(\S+) -v (\S+)$/
-        return new($1, $2)
+      if line.strip =~ /^(\S+) -v (\S+)(?:| -s (\S+))$/
+        return new($1, $2, $3)
       else
         abort("Invalid requirement found: #{line}")
       end
@@ -56,7 +56,11 @@ module Dep
     end
 
     def to_s
-      "#{name} -v #{version}"
+      if !source
+        "#{name} -v #{version}"
+      else
+        "#{name} -v #{version} -s #{source}"
+      end
     end
 
     def csv
@@ -120,12 +124,25 @@ module Dep
         exit
       end
 
-      run "gem install #{@list.missing_libraries.map(&:csv).join(" ")}"
+      gems = @list.missing_libraries.map(&:to_s)
+      puts "Gems to be installed: #{gems.join(' ')}"
+      puts ""
+      gems.each do |name|
+        puts "Installing: #{name}"
+        run "gem install #{name}"
+      end
+      puts ""
+      puts "Finished installing all gems."
     end
 
     def run(cmd)
-      puts "  #{cmd}"
-      `#{cmd}`
+      IO.popen(cmd).each do |line|
+        puts line
+      end.close # Without close, you won't be able to access $?
+
+      unless $?.exitstatus == 0
+        exit 1
+      end
     end
   end
 end
